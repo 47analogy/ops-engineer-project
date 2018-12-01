@@ -69,7 +69,6 @@ class TestBillingSchedules(unittest.TestCase):
             self.policy.invoices[0].amount_due, self.policy.annual_premium / 12)
 
 
-@unittest.skip("buggy code - utils.py")
 class TestReturnAccountBalance(unittest.TestCase):
 
     @classmethod
