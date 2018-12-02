@@ -146,7 +146,7 @@ class PolicyAccounting(object):
 
         billing_schedules = {
             'Annual': None,
-            'Semi-Annual': 3,  # TODO: should be 2
+            'Two-Pay': 2,  # Modify to reflect 'Two-Pay' payments
             'Quarterly': 4,
             'Monthly': 12
         }
