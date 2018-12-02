@@ -16,18 +16,33 @@ This is the base code for the engineer project.
 class PolicyAccounting(object):
     """
      Each policy has its own instance of accounting.
+
+     Attributes:
+        policy_id: An integer representing identity of a specific policy.
     """
 
     def __init__(self, policy_id):
         self.policy = Policy.query.filter_by(id=policy_id).one()
+        """Inits PolicyAccounting with one policy based on the policy id."""
 
         if not self.policy.invoices:
             self.make_invoices()
 
     def return_account_balance(self, date_cursor=None):
+        """Calculates the amount remaining to be paid on a policy.
+
+        Fetches invoices and payments made for a policy and calculates
+        the amount due on an account based on a date.
+
+        Parameters:
+            date_cursor: A variable representing the date.
+
+        Returns:
+            An integer representing the dollar amount due on an account.
+        """
         if not date_cursor:
             date_cursor = datetime.now().date()
-
+        # Modify .filter() to also include dates equal to date_cursor.
         invoices = Invoice.query.filter_by(policy_id=self.policy.id)\
                                 .filter(Invoice.bill_date <= date_cursor)\
                                 .order_by(Invoice.bill_date)\
@@ -35,7 +50,7 @@ class PolicyAccounting(object):
         due_now = 0
         for invoice in invoices:
             due_now += invoice.amount_due
-
+        # Modify .filter() to also include dates equal to date_cursor.
         payments = Payment.query.filter_by(policy_id=self.policy.id)\
                                 .filter(Payment.transaction_date <= date_cursor)\
                                 .all()
@@ -45,6 +60,16 @@ class PolicyAccounting(object):
         return due_now
 
     def make_payment(self, contact_id=None, date_cursor=None, amount=0):
+        """Makes payment on the account of a policy.
+
+        Parameters:
+            contact_id: An integer representing the identity of payer.
+            date_cursor: A variable representing the date.
+            amount: An integer representing the dollar amount of the payment.
+
+        Returns:
+            An integer representing the dollar amount paid to an account.
+        """
         if not date_cursor:
             date_cursor = datetime.now().date()
 
@@ -73,6 +98,18 @@ class PolicyAccounting(object):
         pass
 
     def evaluate_cancel(self, date_cursor=None):
+        """Determine if a policy should be canceled.
+
+        Fetches invoices of a policy and compares
+        to the cancel date to determine if there
+        is an outstanding balance.
+
+        Parameters:
+            date_cursor: A variable representing the date.
+
+        Returns:
+            None. Prints cancellation status.
+        """
         if not date_cursor:
             date_cursor = datetime.now().date()
 
@@ -91,12 +128,25 @@ class PolicyAccounting(object):
             print "THIS POLICY SHOULD NOT CANCEL"
 
     def make_invoices(self):
+        """Create invoices for a policy
+
+        Uses an integer representing the number
+        of payments for the billing schedule and
+        makes invoices.
+
+        Parameters:
+            None
+
+        Returns:
+            Adds invoices to the data base and prints message
+            if billing schedule is invalid.
+        """
         for invoice in self.policy.invoices:
             invoice.delete()
 
         billing_schedules = {
             'Annual': None,
-            'Semi-Annual': 3,  # ?? Why 3
+            'Semi-Annual': 3,  # TODO: should be 2
             'Quarterly': 4,
             'Monthly': 12
         }
@@ -139,7 +189,7 @@ class PolicyAccounting(object):
                                   bill_date + relativedelta(months=1, days=14),
                                   self.policy.annual_premium / billing_schedules.get(self.policy.billing_schedule))
                 invoices.append(invoice)
-        elif self.policy.billing_schedule == "Monthly":  # monthly invoice
+        elif self.policy.billing_schedule == "Monthly":  # Add monthly invoice
             # DRY lines 145, 146 and 154
             first_invoice.amount_due = first_invoice.amount_due / \
                 billing_schedules.get(self.policy.billing_schedule)
