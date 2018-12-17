@@ -4,7 +4,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from accounting import db
-from models import Contact, Invoice, Payment, Policy
+from models import CancelPolicy, Contact, Invoice, Payment, Policy
 
 """
 #######################################################
@@ -358,6 +358,35 @@ class PolicyAccounting(object):
         for invoice in invoices:
             invoice.deleted = 1  # mark invoice as deleted
             db.session.add(invoice)
+        db.session.commit()
+
+    def cancel_policy(self, cancel_cause, cancel_by, date_cursor=None,):
+        """Cancels a policy.
+
+        If policy is cancelled due to non payment
+        cancel policy is called from evaluate_cancel method,
+        otherwise a reason for cancellation is provided.
+        Policy status is updated in policies table.
+
+        Parameters:
+            date_cursor: A variable representing the cancel date.
+            cancel_cause: A string variable representing the cause
+                        of cancellation.
+            cancel_by: A string variable representing who cancelled the policy.
+        Returns:
+            Adds cancellation information to the database.
+        """
+        if not date_cursor:
+            date_cursor = datetime.now().date()
+
+        policy_cancel = CancelPolicy(self.policy.id,
+                                     cancel_cause,
+                                     cancel_by,
+                                     date_cursor)
+        db.session.add(policy_cancel)
+
+        policy = Policy.query.get(self.policy.id)  # update policy status
+        policy.status = "Canceled"
         db.session.commit()
 
 

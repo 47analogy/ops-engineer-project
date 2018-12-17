@@ -5,7 +5,7 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 
 from accounting import db
-from models import Contact, Invoice, Payment, Policy
+from models import CancelPolicy, Contact, Invoice, Payment, Policy
 from utils import PolicyAccounting
 
 """
@@ -122,6 +122,7 @@ class TestReturnAccountBalance(unittest.TestCase):
         self.assertEquals(pa.return_account_balance(
             date_cursor=invoices[3].bill_date), 1200)
 
+    # not valid with the agent only able to pay due to cancellation pending functionality
     def test_quarterly_on_second_installment_bill_date_with_full_payment(self):
         self.policy.billing_schedule = "Quarterly"
         pa = PolicyAccounting(self.policy.id)
@@ -131,3 +132,36 @@ class TestReturnAccountBalance(unittest.TestCase):
                                              date_cursor=invoices[1].bill_date, amount=600))
         self.assertEquals(pa.return_account_balance(
             date_cursor=invoices[1].bill_date), 0)
+
+
+class TestCancelPolicy(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.policy = Policy('Test Policy', date(2015, 2, 1), 700)
+        db.session.add(cls.policy)
+        db.session.commit()
+
+        cls.policy.id = cls.policy.id
+        cls.cancellation = CancelPolicy(
+            cls.policy.id, "non-payment", "insured", date(2015, 3, 18))
+        db.session.add(cls.cancellation)
+        db.session.commit()
+
+    @classmethod
+    def tearDownClass(cls):
+        db.session.delete(cls.policy)
+        db.session.delete(cls.cancellation)
+        db.session.commit()
+
+    def setUp(self):
+        pass
+
+    def tearDown(self):
+        db.session.commit()
+
+    def test_cancel_date(self):
+        self.policy.billing_schedule = "Annual"
+        self.assertFalse(self.policy.invoices)
+        date = datetime.strptime(
+            str('2015, 3, 18'), '%Y, %m, %d').date()
+        self.assertEquals(self.cancellation.cancel_date, date)
