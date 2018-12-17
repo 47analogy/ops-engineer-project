@@ -62,6 +62,10 @@ class PolicyAccounting(object):
     def make_payment(self, contact_id=None, date_cursor=None, amount=0):
         """Makes payment on the account of a policy.
 
+        Allows insured or agent to make a payment on a policy. If the
+        policy staus is pending cancellation due to non-pay, only an
+        agent can make the payment.
+
         Parameters:
             contact_id: An integer representing the identity of payer.
             date_cursor: A variable representing the date.
@@ -69,9 +73,21 @@ class PolicyAccounting(object):
 
         Returns:
             An integer representing the dollar amount paid to an account.
+            If account is pending cancellation, then returns status.
         """
         if not date_cursor:
             date_cursor = datetime.now().date()
+
+        agents = Contact.query.filter_by(role="Agent").all()
+        payer = Payment.contact_id  # person making payment
+
+        if self.evaluate_cancellation_pending_due_to_non_pay(date_cursor):
+            for agent in agents:
+                if agent.id != payer:
+                    print "ONLY AN AGENT CAN MAKE THIS PAYMENT"
+                    break
+
+            return
 
         if not contact_id:
             try:
@@ -89,13 +105,34 @@ class PolicyAccounting(object):
         return payment
 
     def evaluate_cancellation_pending_due_to_non_pay(self, date_cursor=None):
-        """
+        """Determine if a policy is pending cancellation due to non-payment
+
          If this function returns true, an invoice
          on a policy has passed the due date without
          being paid in full. However, it has not necessarily
          made it to the cancel_date yet.
+
+        Parameters:
+            date_cursor: A variable representing the date.
+
+        Returns:
+            A boolean representing the cancellation pending status.
         """
-        pass
+        if not date_cursor:
+            date_cursor = datetime.now().date()
+
+        invoices = Invoice.query.filter_by(policy_id=self.policy.id)\
+                                .filter(Invoice.due_date < date_cursor)\
+                                .order_by(Invoice.due_date)\
+                                .all()
+
+        for invoice in invoices:
+            if not self.return_account_balance(invoice.due_date):
+                continue
+            else:
+                return True
+        else:
+            return False
 
     def evaluate_cancel(self, date_cursor=None):
         """Determine if a policy should be canceled.
@@ -128,25 +165,22 @@ class PolicyAccounting(object):
             print "THIS POLICY SHOULD NOT CANCEL"
 
     def make_invoices(self):
-        """Create invoices for a policy
+        """Create invoices for a policy.
 
         Uses an integer representing the number
         of payments for the billing schedule and
         makes invoices.
-
-        Parameters:
-            None
 
         Returns:
             Adds invoices to the data base and prints message
             if billing schedule is invalid.
         """
         for invoice in self.policy.invoices:
-            invoice.delete()
+            invoice.delete = 0  # modify to allow 0 to be a deleted invoice
 
         billing_schedules = {
             'Annual': None,
-            'Two-Pay': 2,  # Modify to reflect 'Two-Pay' payments
+            'Semi-Annual': 2,
             'Quarterly': 4,
             'Monthly': 12
         }
@@ -189,7 +223,7 @@ class PolicyAccounting(object):
                                   bill_date + relativedelta(months=1, days=14),
                                   self.policy.annual_premium / billing_schedules.get(self.policy.billing_schedule))
                 invoices.append(invoice)
-        elif self.policy.billing_schedule == "Monthly":  # Add monthly invoice
+        elif self.policy.billing_schedule == "Monthly":  # monthly invoice
             # DRY lines 145, 146 and 154
             first_invoice.amount_due = first_invoice.amount_due / \
                 billing_schedules.get(self.policy.billing_schedule)
@@ -209,6 +243,7 @@ class PolicyAccounting(object):
         for invoice in invoices:
             db.session.add(invoice)
         db.session.commit()
+
 
 ################################
 # The functions below are for the db and
