@@ -223,8 +223,7 @@ class PolicyAccounting(object):
                                   bill_date + relativedelta(months=1, days=14),
                                   self.policy.annual_premium / billing_schedules.get(self.policy.billing_schedule))
                 invoices.append(invoice)
-        elif self.policy.billing_schedule == "Monthly":  # monthly invoice
-            # DRY lines 145, 146 and 154
+        elif self.policy.billing_schedule == "Monthly":
             first_invoice.amount_due = first_invoice.amount_due / \
                 billing_schedules.get(self.policy.billing_schedule)
             for i in range(1, billing_schedules.get(self.policy.billing_schedule)):
@@ -241,6 +240,123 @@ class PolicyAccounting(object):
             print "You have chosen a bad billing schedule."
 
         for invoice in invoices:
+            db.session.add(invoice)
+        db.session.commit()
+
+    def change_billing_schedule(self, new_schedule, date_cursor=None):
+        """Creates a new billing schedule during a policy term
+
+        Changes the policy billing schedule to a new billing
+        schedule mid-policy. Utilizes delete_invoices() helper
+        to remove previous invoices (invoice deleted column = 1).
+
+        Parameters:
+            date_cursor:  A variable representing the date.
+            new_schedule: A variable representing the new billing schedule:
+                        Annual, Two-Pay, Quarterly, Monthly
+
+        Returns:
+            Adds invoices to the data base and prints message
+            if billing schedule is invalid.
+        """
+        if not date_cursor:
+            date_cursor = datetime.now().date()
+
+        self.delete_invoices()
+
+        remaining_balance = self.return_account_balance(date_cursor)
+
+        self.policy.billing_schedule = new_schedule
+
+        # can be used to total number payments up to current date
+        all_payments = Payment.query.filter_by(policy_id=self.policy.id)\
+            .order_by(Payment.transaction_date)\
+            .all()
+
+        last_payment_date = Payment.query.filter_by(policy_id=self.policy.id)\
+            .order_by(Payment.transaction_date.desc())\
+            .first()
+
+        next_payment_date = datetime.strptime(
+            str(last_payment_date.transaction_date), '%Y-%m-%d').date()
+
+        def invoice_frequency(months_next_invoice):
+            """helper function to determine number of invoices"""
+            next_invoice.amount_due = remaining_balance / \
+                (billing_schedules.get(
+                    self.policy.billing_schedule))
+            for i in range(1, billing_schedules.get(self.policy.billing_schedule)):
+                months_after_eff_date = (i * months_next_invoice)
+
+                bill_date = next_payment_date + \
+                    relativedelta(months=months_after_eff_date)
+
+                invoice = Invoice(self.policy.id,
+                                  bill_date + relativedelta(months=1),
+                                  bill_date + relativedelta(months=2),
+                                  bill_date +
+                                  relativedelta(months=2, days=14),
+                                  remaining_balance /
+                                  billing_schedules.get(self.policy.billing_schedule))
+                invoices.append(invoice)
+
+        for invoice in self.policy.invoices:
+            invoice.delete = 0  # modify to allow 0 to be a deleted invoice
+
+        billing_schedules = {
+            'Annual': None,
+            'Two-Pay': 2,
+            'Quarterly': 4,
+            'Monthly': 12
+        }
+
+        invoices = []
+        next_invoice = Invoice(self.policy.id,
+                               next_payment_date +
+                               relativedelta(months=1),  # new bill date
+                               next_payment_date + \
+                               relativedelta(months=2),  # new due date
+                               next_payment_date + \
+                               relativedelta(months=2, days=14),  # cancel date
+                               remaining_balance)
+        invoices.append(next_invoice)
+
+        if self.policy.billing_schedule == "Annual":
+            pass  # one payment
+        elif self.policy.billing_schedule == "Two-Pay":
+            invoice_frequency(6)  # two payments
+        elif self.policy.billing_schedule == "Quarterly":
+            invoice_frequency(3)  # four payments
+        elif self.policy.billing_schedule == "Monthly":
+            invoice_frequency(1)  # twelve payments
+        else:
+            print "You have chosen a bad billing schedule."
+
+        for invoice in invoices:
+            db.session.add(invoice)
+        db.session.commit()
+
+    def delete_invoices(self, date_cursor=None):
+        """helper function to delete invoices
+
+        Changes invoice deleted column to 1.
+
+        Parameters:
+            date_cursor: A variable representing the date.
+
+        Returns:
+            An integer indicating invoice is no longer valid.
+        """
+        if not date_cursor:
+            date_cursor = datetime.now().date()
+
+        invoices = Invoice.query.filter_by(policy_id=self.policy.id)\
+            .filter(Invoice.bill_date <= date_cursor)\
+            .order_by(Invoice.bill_date)\
+            .all()
+
+        for invoice in invoices:
+            invoice.deleted = 1  # mark invoice as deleted
             db.session.add(invoice)
         db.session.commit()
 
